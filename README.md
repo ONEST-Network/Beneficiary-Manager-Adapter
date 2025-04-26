@@ -1,0 +1,1 @@
+# Beneficiary-Manager-Adapter
