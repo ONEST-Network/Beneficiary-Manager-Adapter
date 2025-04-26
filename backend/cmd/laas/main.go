@@ -58,6 +58,9 @@ func main() {
 	if err := db.DB.AutoMigrate(&models.Scheme{}); err != nil {
 		log.Fatalf("Failed to automigrate database: %v", err)
 	}
+	if err := db.DB.AutoMigrate(&models.Eligibility{}); err != nil {
+		log.Fatalf("Failed to automigrate database: %v", err)
+	}
 
 	if err := r.Run(); err != nil {
 		log.Fatalf("Error while running the server: %v", err)

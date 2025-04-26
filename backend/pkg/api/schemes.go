@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"math"
 	"net/http"
 	"strconv"
@@ -11,6 +12,8 @@ import (
 	"gorm.io/gorm"
 )
 
+// GetSchemes retrieves all schemes with optional filters
+// GetSchemes retrieves all schemes with optional filters
 // GetSchemes retrieves all schemes with optional filters
 func GetSchemes(c *gin.Context) {
 	page, _ := strconv.ParseInt(c.DefaultQuery("page", "1"), 10, 64)
@@ -33,33 +36,63 @@ func GetSchemes(c *gin.Context) {
 		return
 	}
 
-	// Start building the query using GORM's Model method for dynamic filtering
-	query := db.DB.Model(&models.Scheme{})
+	// Start building the query with the joins directly
+	query := db.DB.Model(&models.Scheme{}).
+		Joins("JOIN eligibilities ON eligibilities.id = schemes.eligibility_id").
+		Preload("Eligibility") // Preload Eligibility if you want to load it as part of the scheme data
+	// Print the query output before filtering
+	if err := query.Find(&schemes).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+			Code:    http.StatusInternalServerError,
+			Message: "Failed to fetch schemes",
+			Error:   err.Error(),
+		})
+		return
+	}
 
-	// Apply filters dynamically using GORM
+	// Print the result (schemes) to see the raw data before filtering
+	fmt.Println("Schemes with Eligibility before applying filters:")
+	for _, scheme := range schemes {
+		fmt.Println(scheme.Eligibility.Gender)
+	}
+
+	fmt.Println(filter)
+
+	// Apply Scheme Filters
 	if filter.Name != nil {
-		query = query.Where("name ILIKE ?", "%"+*filter.Name+"%")
+		query = query.Where("schemes.name ILIKE ?", "%"+*filter.Name+"%")
 	}
 	if filter.Status != nil {
-		query = query.Where("status = ?", *filter.Status)
+		query = query.Where("schemes.status = ?", *filter.Status)
 	}
 	if filter.MinAmount != nil {
-		query = query.Where("amount >= ?", *filter.MinAmount)
+		query = query.Where("schemes.amount >= ?", *filter.MinAmount)
 	}
 	if filter.MaxAmount != nil {
-		query = query.Where("amount <= ?", *filter.MaxAmount)
+		query = query.Where("schemes.amount <= ?", *filter.MaxAmount)
 	}
 	if filter.StartAfter != nil {
-		query = query.Where("start_date >= ?", *filter.StartAfter)
+		query = query.Where("schemes.start_date >= ?", *filter.StartAfter)
 	}
 	if filter.EndBefore != nil {
-		query = query.Where("end_date <= ?", *filter.EndBefore)
-	}
-	if filter.Eligibility != nil {
-		query = query.Where("eligibility ILIKE ?", "%"+*filter.Eligibility+"%")
-
+		query = query.Where("schemes.end_date <= ?", *filter.EndBefore)
 	}
 
+	// Apply Eligibility Filters
+	if filter.Gender != nil {
+		query = query.Where("eligibilities.gender = ?", *filter.Gender)
+	}
+	if filter.AcademicQualification != nil {
+		query = query.Where("eligibilities.academic_qualification = ?", *filter.AcademicQualification)
+	}
+	if filter.IncomeLimit != nil {
+		query = query.Where("eligibilities.income_limit <= ?", *filter.IncomeLimit)
+	}
+	if filter.Category != nil {
+		query = query.Where("eligibilities.category = ?", *filter.Category)
+	}
+
+	// Count total schemes first (after the filters)
 	var totalCount int64
 	if err := query.Count(&totalCount).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
@@ -72,17 +105,16 @@ func GetSchemes(c *gin.Context) {
 
 	// Calculate total pages
 	totalPages := int64(math.Ceil(float64(totalCount) / float64(pagination.GetLimit())))
-	// Build previous and next links
+
+	// Pagination
+	// Build pagination links
 	params := c.Request.URL.Query()
 	basePath := c.Request.URL.Path
-
 	var previous, next string
-
 	if pagination.Page > 1 {
 		params.Set("page", strconv.FormatInt(pagination.Page-1, 10))
 		previous = basePath + "?" + params.Encode()
 	}
-
 	if pagination.Page < totalPages {
 		params.Set("page", strconv.FormatInt(pagination.Page+1, 10))
 		next = basePath + "?" + params.Encode()
@@ -97,7 +129,7 @@ func GetSchemes(c *gin.Context) {
 		Next:          next,
 	}
 
-	// Execute the query and fetch the filtered results
+	// Fetch the filtered schemes
 	if err := query.Offset(int(offset)).Limit(int(pagination.GetLimit())).Find(&schemes).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
 			Code:    http.StatusInternalServerError,
@@ -107,6 +139,7 @@ func GetSchemes(c *gin.Context) {
 		return
 	}
 
+	// Respond with the filtered schemes and pagination info
 	res := models.SchemeResponse{
 		Data:    schemes,
 		Code:    http.StatusOK,
@@ -115,13 +148,6 @@ func GetSchemes(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, res)
-
-	// // Return the fetched schemes
-	// c.JSON(http.StatusOK, models.SchemeResponse{
-	// 	Code:    http.StatusOK,
-	// 	Message: "Schemes fetched successfully",
-	// 	Data:    schemes,
-	// })
 }
 
 // GetSchemeByID retrieves a specific scheme by its ID
