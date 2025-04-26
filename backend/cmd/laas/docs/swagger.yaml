@@ -1,0 +1,16 @@
+basePath: /api/v1
+consumes:
+- application/json
+host: localhost:8080
+info:
+  contact: {}
+  description: This is a sample API for beneficiary management.
+  title: Beneficiary Manager API
+  version: "1.0"
+paths: {}
+produces:
+- application/json
+schemes:
+- http
+- https
+swagger: "2.0"
