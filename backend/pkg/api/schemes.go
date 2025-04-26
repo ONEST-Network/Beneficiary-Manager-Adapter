@@ -72,18 +72,30 @@ func GetSchemes(c *gin.Context) {
 
 	// Calculate total pages
 	totalPages := int64(math.Ceil(float64(totalCount) / float64(pagination.GetLimit())))
+	// Build previous and next links
+	params := c.Request.URL.Query()
+	basePath := c.Request.URL.Path
+
+	var previous, next string
+
+	if pagination.Page > 1 {
+		params.Set("page", strconv.FormatInt(pagination.Page-1, 10))
+		previous = basePath + "?" + params.Encode()
+	}
+
+	if pagination.Page < totalPages {
+		params.Set("page", strconv.FormatInt(pagination.Page+1, 10))
+		next = basePath + "?" + params.Encode()
+	}
 
 	meta := &models.PaginationMeta{
 		ResourceCount: int(totalCount),
 		TotalPages:    totalPages,
 		Page:          pagination.Page,
 		Limit:         pagination.Limit,
+		Previous:      previous,
+		Next:          next,
 	}
-	// if pagination.Page > 1 {
-	// 	params.Set("page", strconv.FormatInt(pagination.Page-1, 10))
-	// 	c.Request.URL.RawQuery = params.Encode()
-	// 	meta.Previous = c.Request.URL.String()
-	// }
 
 	// Execute the query and fetch the filtered results
 	if err := query.Offset(int(offset)).Limit(int(pagination.GetLimit())).Find(&schemes).Error; err != nil {
